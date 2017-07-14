@@ -14,16 +14,26 @@
 @property (nonatomic, strong) CMMotionManager *motionManager;
 //初始速度 默认为10 初始速度越大移动越快
 @property (nonatomic, assign) CGFloat velocity;
+
+@property (nonatomic , assign) BOOL isInside;
+@property (nonatomic , strong) UIBezierPath *path;
 @end
 
 @implementation ViewController
 
 - (void)viewDidLoad {
     [super viewDidLoad];
+    self.velocity = 20;
     self.view.backgroundColor = [UIColor lightGrayColor];
     
     [self.view addSubview:self.yuanView];
-    [self.view addSubview:self.ballView];
+    [self.yuanView addSubview:self.ballView];
+
+    UIColor *color = [UIColor redColor];
+    [color set];//设置线条颜色
+    
+    _path = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(self.ballView.bounds.size.width / 2, self.ballView.bounds.size.width / 2, self.yuanView.frame.size.width  - self.ballView.bounds.size.width , self.yuanView.frame.size.width - self.ballView.bounds.size.width)];
+    
     
     [self createMotion];
     
@@ -40,8 +50,8 @@
         //加速度计开始更新
         [_motionManager startAccelerometerUpdatesToQueue:[NSOperationQueue mainQueue] withHandler:^(CMAccelerometerData * _Nullable accelerometerData, NSError * _Nullable error) {
             if (!error) {
-                CGFloat pointX = self.view.center.x + accelerometerData.acceleration.x * _velocity;
-                CGFloat pointY = self.view.center.y - accelerometerData.acceleration.y * _velocity;
+                CGFloat pointX = self.ballView.center.x + accelerometerData.acceleration.x * _velocity;
+                CGFloat pointY = self.ballView.center.y - accelerometerData.acceleration.y * _velocity;
                 
                 if (pointX < self.ballView.bounds.size.width / 2) {
                     pointX = self.ballView.bounds.size.width / 2;
@@ -53,18 +63,17 @@
                 }else if (pointY > self.yuanView.frame.size.height - self.ballView.bounds.size.height / 2){
                     pointY = self.yuanView.frame.size.height - self.ballView.bounds.size.height / 2;
                 }
-                //更新眼睛位置
+                //更新位置
                 self.ballView.center = CGPointMake(pointX, pointY);
                 //半径
                 CGFloat r = self.yuanView.frame.size.width / 2 - self.ballView.bounds.size.width / 2;
                 //圆点
                 CGPoint center = CGPointMake(self.yuanView.frame.size.width / 2, self.yuanView.frame.size.width / 2);
-                //当前眼睛中心点
+                //当前中心点
                 CGPoint currentPoint = self.ballView.center;
                 
-                UIBezierPath *path = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(self.ballView.bounds.size.width / 2, self.ballView.bounds.size.width / 2, self.yuanView.frame.size.width  - self.ballView.bounds.size.width , self.yuanView.frame.size.width - self.ballView.bounds.size.width)];
-                //判断眼睛是否在圆内
-                if (CGPathContainsPoint(path.CGPath, NULL, self.ballView.center, NO)) {
+                //判断是否在圆内
+                if (CGPathContainsPoint(_path.CGPath, NULL, self.ballView.center, NO)) {
                     
                 }else{
                     //获取当前点与圆点之间的距离
@@ -81,15 +90,56 @@
 }
 
 
+
+#pragma mark ---------------touch ---------------------/
+//上层调用。
+- (void)touchesBegan:(NSSet *)touches withEvent:(UIEvent *)event {
+    UITouch *touch = [touches anyObject];
+    CGPoint touchPoint = [touch locationInView:self.yuanView];
+    //将self中的点转换成myView上的点。进行一个坐标系统的转换。
+    touchPoint = [self.yuanView convertPoint:touchPoint toView:self.ballView];
+    // 判断一个点的坐标是否在myView上。
+    _isInside = [self.ballView pointInside:touchPoint withEvent:event];
+    if (_isInside) {
+        [UIView animateWithDuration:.2 animations:^{
+            self.ballView.transform = CGAffineTransformMakeScale(1.3, 1.3);
+        }];
+    }
+}
+
+- (void)touchesMoved:(NSSet *)touches withEvent:(UIEvent *)event{
+    if (_isInside) {
+
+        UITouch *touch = [touches anyObject];
+        CGPoint point = [touch locationInView:self.yuanView];
+
+        //获取到触摸移动前的点的坐标。
+        CGPoint previousPoint = [touch previousLocationInView:self.yuanView];
+        float moveX = point.x - previousPoint.x;
+        float moveY = point.y - previousPoint.y;
+        
+        CGRect frame = self.ballView.frame;
+        frame.origin.x += moveX;
+        frame.origin.y += moveY;
+        self.ballView.frame = frame;
+    }
+}
+
+- (void)touchesEnded:(NSSet<UITouch *> *)touches withEvent:(UIEvent *)event{
+    [UIView animateWithDuration:.3 animations:^{
+        self.ballView.transform = CGAffineTransformIdentity;
+    }];
+}
+
+#pragma mark ---------------lazy ---------------------/
 - (UIView *)yuanView{
     if (!_yuanView) {
-        _yuanView = [[UIView alloc]initWithFrame:CGRectMake(0, 0, 200, 200)];
+        _yuanView = [[UIView alloc]initWithFrame:CGRectMake(0, 0, 260, 260)];
         _yuanView.center = self.view.center;
         _yuanView.backgroundColor = [UIColor whiteColor];
-        _yuanView.layer.cornerRadius = 100;
+        _yuanView.layer.cornerRadius = _yuanView.frame.size.width/2.0;
         _yuanView.layer.masksToBounds = YES;
-        _yuanView.layer.borderWidth = 5.0;
-        _yuanView.layer.borderColor = [UIColor blackColor].CGColor;
+
     }
     return _yuanView;
 }
@@ -98,11 +148,14 @@
     if (!_ballView) {
         _ballView = [[UIView alloc]initWithFrame:CGRectMake(0, 0, 40, 40)];
         _ballView.center = self.view.center;
-        _ballView.layer.cornerRadius = 20;
+        _ballView.layer.cornerRadius = _ballView.frame.size.width/2.0;
         _ballView.layer.masksToBounds = YES;
         _ballView.backgroundColor = [UIColor greenColor];
+        
     }
     return _ballView;
 }
+
+
 
 @end
